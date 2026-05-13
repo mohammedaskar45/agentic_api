@@ -1,22 +1,25 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, IsNull } from 'typeorm';
 import { Role } from './roles.entity';
 import { User } from './users.entity';
 import { MenuMapping } from './menu-mapping.entity';
 import { Menu } from '../menus/menus.entity';
+import { UserCompanyMapping } from './user-company-mapping.entity';
+import { InjectRepository as InjectRepo } from '@nestjs/typeorm';
 
 @Injectable()
 export class AccessControlService {
   constructor(
-    @InjectRepository(Role)
+    @InjectRepo(Role)
     private readonly roleRepository: Repository<Role>,
-    @InjectRepository(User)
+    @InjectRepo(User)
     private readonly userRepository: Repository<User>,
-    @InjectRepository(MenuMapping)
+    @InjectRepo(MenuMapping)
     private readonly menuMappingRepository: Repository<MenuMapping>,
-    @InjectRepository(Menu)
+    @InjectRepo(Menu)
     private readonly menuRepository: Repository<Menu>,
+    @InjectRepo(UserCompanyMapping)
+    private readonly userCompanyMappingRepository: Repository<UserCompanyMapping>,
   ) {}
 
   // ROLE CRUD
@@ -45,11 +48,13 @@ export class AccessControlService {
   }
 
   // USER CRUD
-  async findAllUsers(): Promise<User[]> {
-    return this.userRepository.find({
-      relations: ['role'],
-      order: { created_on: 'DESC' },
-    });
+  async findAllUsers(companyId: string): Promise<User[]> {
+    return this.userRepository.createQueryBuilder('user')
+      .innerJoin('user_company_mapping', 'mapping', 'mapping.user_id = user.user_id')
+      .where('mapping.company_id = :companyId', { companyId })
+      .leftJoinAndSelect('user.role', 'role')
+      .orderBy('user.created_on', 'DESC')
+      .getMany();
   }
 
   async findOneUser(id: string): Promise<User> {
@@ -61,9 +66,19 @@ export class AccessControlService {
     return user;
   }
 
-  async createUser(userData: Partial<User>): Promise<User> {
+  async createUser(userData: Partial<User>, companyId: string): Promise<User> {
     const user = this.userRepository.create(userData);
-    return this.userRepository.save(user);
+    const savedUser = await this.userRepository.save(user);
+
+    // Map user to current company
+    const mapping = this.userCompanyMappingRepository.create({
+      user_id: savedUser.user_id,
+      company_id: companyId,
+      is_primary: true,
+    });
+    await this.userCompanyMappingRepository.save(mapping);
+
+    return savedUser;
   }
 
   async updateUser(id: string, userData: Partial<User>): Promise<User> {

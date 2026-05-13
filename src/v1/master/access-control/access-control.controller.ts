@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Delete, Body, Param, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Body, Param, UseGuards, Headers } from '@nestjs/common';
 import { AccessControlService } from './access-control.service';
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
 
@@ -30,13 +30,13 @@ export class AccessControlController {
 
   // USERS
   @Get('users')
-  async getAllUsers() {
-    return this.accessControlService.findAllUsers();
+  async getAllUsers(@Headers('x-company-id') companyId: string) {
+    return this.accessControlService.findAllUsers(companyId);
   }
 
   @Post('users')
-  async createUser(@Body() userData: any) {
-    return this.accessControlService.createUser(userData);
+  async createUser(@Headers('x-company-id') companyId: string, @Body() userData: any) {
+    return this.accessControlService.createUser(userData, companyId);
   }
 
   @Patch('users/:id')
