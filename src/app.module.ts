@@ -8,6 +8,7 @@ import { config } from './config/db.config';
 import { LoggerMiddleware } from './middleware/logging.middleware';
 import { AuthModule } from './auth/auth.module';
 import { MenusModule } from './v1/master/menus/menus.module';
+import { AccessControlModule } from './v1/master/access-control/access-control.module';
 import { IncorporationModule } from './v1/compliance/incorporation/incorporation.module';
 
 @Module({
@@ -19,6 +20,7 @@ import { IncorporationModule } from './v1/compliance/incorporation/incorporation
     TypeOrmModule.forRoot(config),
     AuthModule,
     MenusModule,
+    AccessControlModule,
     IncorporationModule,
   ],
   controllers: [AppController],
