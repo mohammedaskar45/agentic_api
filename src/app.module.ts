@@ -10,6 +10,7 @@ import { AuthModule } from './auth/auth.module';
 import { MenusModule } from './v1/master/menus/menus.module';
 import { AccessControlModule } from './v1/master/access-control/access-control.module';
 import { IncorporationModule } from './v1/compliance/incorporation/incorporation.module';
+import { RightsIssueModule } from './v1/compliance/rights-issue/rights-issue.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { IncorporationModule } from './v1/compliance/incorporation/incorporation
     MenusModule,
     AccessControlModule,
     IncorporationModule,
+    RightsIssueModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -8,6 +8,7 @@ import {
 } from './entities/incorporation.entity';
 import { IncorporationLog } from './entities/incorporation-log.entity';
 import { MasterDropdown } from './entities/master-dropdown.entity';
+import { NIC_CODES, HSN_CODES, PIN_TO_ROC } from './constants/mca-codes';
 import { IncMasterData } from './entities/inc-master-data.entity';
 import { IncStakeholder } from './entities/inc-stakeholder.entity';
 import { IncDsc, IncDin, IncRun } from './entities/inc-steps-basic.entity';
@@ -17,6 +18,7 @@ import {
   IncCoi,
   IncCommencement,
 } from './entities/inc-steps-advanced.entity';
+import { IncAuditor } from './entities/inc-auditor.entity';
 import { IncBank, IncAgile } from './entities/inc-steps-final.entity';
 
 @Injectable()
@@ -74,6 +76,7 @@ export class IncorporationService {
         'bank_data',
         'agile_data',
         'commencement_data',
+        'auditor_data',
       ],
     });
 
@@ -81,7 +84,7 @@ export class IncorporationService {
       data = this.incorporationRepository.create({
         company_id: companyId,
         current_step_id: 0,
-        workflow_status: Array.from({ length: 12 }, (_, i) => ({
+        workflow_status: Array.from({ length: 13 }, (_, i) => ({
           id: i,
           status: i === 0 ? 'current' : 'upcoming',
         })) as WorkflowStepStatus[],
@@ -132,8 +135,59 @@ export class IncorporationService {
       daysElapsed: daysElapsed || 1,
       pendingTasks: pendingTasks,
       vaultFiles: vaultFiles || 0,
-      progress: Math.round((completedSteps / 12) * 100),
+      progress: Math.round((completedSteps / 13) * 100),
+      deadlines: this.getComplianceDeadlines(record),
     };
+  }
+
+  public getComplianceDeadlines(record: Incorporation) {
+    const coiDate = record.coi_data?.registration_date
+      ? new Date(record.coi_data.registration_date)
+      : null;
+
+    if (!coiDate) return [];
+
+    const auditorData = record.auditor_data;
+    const appointmentDate = auditorData?.appointment_date ? new Date(auditorData.appointment_date) : null;
+
+    const deadlines = [
+      {
+        task: 'First Board Meeting',
+        days_limit: 30,
+        deadline: new Date(coiDate.getTime() + 30 * 24 * 60 * 60 * 1000),
+        section: 'Section 173',
+      },
+      {
+        task: 'File ADT-1 with ROC',
+        days_limit: 15,
+        deadline: appointmentDate 
+          ? new Date(appointmentDate.getTime() + 15 * 24 * 60 * 60 * 1000)
+          : new Date(coiDate.getTime() + 45 * 24 * 60 * 60 * 1000), // Estimated 30 (BM) + 15 (Filing)
+        section: 'Section 139(6)',
+      },
+      {
+        task: 'File INC-20A (Commencement)',
+        days_limit: 180,
+        deadline: new Date(coiDate.getTime() + 180 * 24 * 60 * 60 * 1000),
+        section: 'Section 10A',
+      },
+    ];
+
+    return deadlines.map((d) => {
+      const now = new Date();
+      const remainingDays = Math.ceil(
+        (d.deadline.getTime() - now.getTime()) / (1000 * 60 * 60 * 24),
+      );
+      let status = 'green';
+      if (remainingDays <= 7) status = 'red';
+      else if (remainingDays <= 14) status = 'amber';
+
+      return {
+        ...d,
+        remaining_days: remainingDays,
+        status,
+      };
+    });
   }
 
   async saveMasterData(companyId: string, data: any): Promise<any> {
@@ -549,10 +603,12 @@ export class IncorporationService {
     if (record.step_uploads && record.step_uploads[stepId]) {
       record.step_uploads[stepId].status = 'verified';
       record.step_uploads[stepId].verified_at = new Date();
+      record.step_uploads[stepId].verification_result = 'MATCHED'; // Simulated AI match
       await this.logEvent(
         companyId,
         'DOC_VERIFIED',
-        `AI Verification completed for Step ${stepId} document.`,
+        `AI Verification completed for Step ${stepId}: ${record.step_uploads[stepId].filename} matched requirements.`,
+        { stepId, filename: record.step_uploads[stepId].filename },
       );
     }
     return await this.incorporationRepository.save(record);
@@ -586,6 +642,30 @@ export class IncorporationService {
         title: 'DIR-2: Consent to act as Director',
         category: 'Pre-Incorporation',
         content: `FORM DIR-2\n(Pursuant to Section 152(5) and Rule 8 of Companies Appointment and Qualification of Directors Rules, 2014)\n\nTo,\nTHE BOARD OF DIRECTORS,\n${companyName}\n\nSubject: Consent to act as Director of ${companyName}\n\nI, ${stakeholders[0]?.full_name || 'Director'}, hereby give my consent to act as director of ${companyName} pursuant to sub-section (5) of section 152 of the Companies Act, 2013.\n\nDetails:\nPAN: ${stakeholders[0]?.pan}\nDOB: ${stakeholders[0]?.dob}\nAddress: ${stakeholders[0]?.address}\n\nSignature: ________________`,
+      },
+      {
+        id: 'inc9',
+        title: 'INC-9: Declaration by Subscribers and First Directors',
+        category: 'Pre-Incorporation',
+        content: `FORM INC-9\n(Pursuant to Section 7(1)(c) of the Companies Act, 2013)\n\nI, ${stakeholders[0]?.full_name || 'Subscriber'}, being the subscriber/director to the memorandum/articles of association of ${companyName}, do hereby solemnly declare and ought to state that:\n\n1. I have not been convicted of any offence in connection with the promotion, formation or management of any company during the preceding five years.\n2. I have not been found guilty of any fraud or misfeasance or of any breach of duty to any company under this Act during the preceding five years.\n\nDate: ${new Date().toLocaleDateString()}\nSignature: ________________`,
+      },
+      {
+        id: 'br_first_meeting',
+        title: 'Board Resolution: First Board Meeting',
+        category: 'Post-Incorporation',
+        content: `CERTIFIED TRUE COPY OF THE RESOLUTION PASSED AT THE FIRST MEETING OF THE BOARD OF DIRECTORS OF ${companyName} HELD ON ________ AT ________ AT THE REGISTERED OFFICE OF THE COMPANY.\n\n"RESOLVED THAT the Certificate of Incorporation dated ________ issued by the Registrar of Companies, ${company.state} be and is hereby noted."\n\n"RESOLVED FURTHER THAT ${stakeholders[0]?.full_name || 'Director'} be and is hereby elected as the Chairman of the Board of Directors of the Company."\n\n"RESOLVED FURTHER THAT the first auditors of the company, M/s ${company.auditor_name || 'Statutory Auditors'}, Chartered Accountants, be and are hereby appointed to hold office until the conclusion of the first Annual General Meeting."`,
+      },
+      {
+        id: 'auditor_consent',
+        title: 'Auditor Consent & Certificate',
+        category: 'Post-Incorporation',
+        content: `To,\nThe Board of Directors,\n${companyName}\n\nSubject: Consent and Certificate for appointment as Statutory Auditors under Section 139 of the Companies Act, 2013.\n\nDear Sirs,\n\nWe, M/s ${company.auditor_name || 'Auditor Firm'}, Chartered Accountants, hereby provide our consent for appointment as the first statutory auditors of ${companyName}.\n\nWe further certify that the appointment, if made, shall be within the limits specified under Section 141 of the Companies Act, 2013.\n\nFor ${company.auditor_name || 'Auditor Firm'},\nChartered Accountants\n(Signature)`,
+      },
+      {
+        id: 'br_commencement',
+        title: 'Board Resolution: Commencement of Business (INC-20A)',
+        category: 'Post-Incorporation',
+        content: `CERTIFIED TRUE COPY OF THE RESOLUTION PASSED BY THE BOARD OF DIRECTORS OF ${companyName}.\n\n"RESOLVED THAT the Board hereby takes note that all the subscribers to the Memorandum of Association have paid the value of shares agreed to be taken by them and the credit of the same has been received in the Company's Bank Account with ${company.bank_name || 'the Bank'}."\n\n"RESOLVED FURTHER THAT any director of the company be and is hereby authorised to file Form INC-20A with the Registrar of Companies."`,
       },
     ];
 
@@ -842,6 +922,51 @@ export class IncorporationService {
     }
     return await this.incorporationRepository.save(record);
   }
+  async saveAuditor(companyId: string, auditorData: any): Promise<Incorporation> {
+    const record = await this.getByCompany(companyId);
+
+    const auditor =
+      record.auditor_data ||
+      this.incorporationRepository.manager.create(IncAuditor, {
+        incorporation_id: record.incorporation_id,
+      });
+
+    Object.assign(auditor, {
+      auditor_name: auditorData.auditor_name,
+      auditor_frn: auditorData.auditor_frn,
+      auditor_address: auditorData.auditor_address,
+      auditor_email: auditorData.auditor_email,
+      appointment_date: auditorData.appointment_date,
+      consent_received: auditorData.consent_received ?? true,
+      adt1_filed: auditorData.adt1_filed || false,
+      adt1_srn: auditorData.adt1_srn,
+    });
+
+    record.auditor_data = await this.incorporationRepository.manager.save(
+      IncAuditor,
+      auditor,
+    );
+
+    const step = record.workflow_status.find(
+      (s: WorkflowStepStatus) => s.id === 11,
+    );
+    if (step && step.status !== 'completed') {
+      step.status = 'completed';
+      const nextStep = record.workflow_status.find(
+        (s: WorkflowStepStatus) => s.id === 12,
+      );
+      if (nextStep) nextStep.status = 'current';
+      record.current_step_id = 12;
+    }
+
+    await this.logEvent(
+      companyId,
+      'STEP_COMPLETED',
+      'Step 11: First Auditor Appointment completed.',
+    );
+    return await this.incorporationRepository.save(record);
+  }
+
 
   async saveCommencement(
     companyId: string,
@@ -865,7 +990,7 @@ export class IncorporationService {
     );
 
     const step = record.workflow_status.find(
-      (s: WorkflowStepStatus) => s.id === 11,
+      (s: WorkflowStepStatus) => s.id === 12,
     );
     if (step && step.status !== 'completed') {
       step.status = 'completed';
@@ -893,5 +1018,43 @@ export class IncorporationService {
     }
 
     return Math.max(duty, 500); // Minimum 500
+  }
+
+  async getSuggestedCodes(objective: string) {
+    const query = objective.toLowerCase();
+    const suggestedNic = NIC_CODES.filter(n => 
+      n.description.toLowerCase().includes(query) || n.industry.toLowerCase().includes(query)
+    );
+    const suggestedHsn = HSN_CODES.filter(h => 
+      h.description.toLowerCase().includes(query)
+    );
+
+    return {
+      nic: suggestedNic.slice(0, 5),
+      hsn: suggestedHsn.slice(0, 5),
+    };
+  }
+
+  async getJurisdictionByPin(pin: string) {
+    const prefix = pin.substring(0, 2);
+    return PIN_TO_ROC[prefix] || { city: 'Unknown', roc: 'Please select ROC manually', state: 'Unknown' };
+  }
+
+  async validateStakeholders(incorporationId: string) {
+    const record = await this.incorporationRepository.findOne({
+      where: { incorporation_id: incorporationId },
+      relations: ['stakeholders'],
+    });
+
+    return record.stakeholders.map(s => {
+      if (s.nationality !== 'Indian') {
+        return {
+          stakeholder: s.name,
+          requirement: 'APOSTILLE_REQUIRED',
+          message: 'As a foreign national, proof of identity and address must be apostilled or notarized in the home country (Rule 13).',
+        };
+      }
+      return null;
+    }).filter(v => v !== null);
   }
 }

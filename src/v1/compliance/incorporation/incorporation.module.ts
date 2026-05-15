@@ -10,6 +10,7 @@ import { IncStakeholder } from './entities/inc-stakeholder.entity';
 import { IncDsc, IncDin, IncRun } from './entities/inc-steps-basic.entity';
 import { IncMoaAoa, IncSpice, IncCoi, IncCommencement } from './entities/inc-steps-advanced.entity';
 import { IncBank, IncAgile } from './entities/inc-steps-final.entity';
+import { IncAuditor } from './entities/inc-auditor.entity';
 
 @Module({
   imports: [
@@ -27,7 +28,8 @@ import { IncBank, IncAgile } from './entities/inc-steps-final.entity';
       IncCoi,
       IncCommencement,
       IncBank,
-      IncAgile
+      IncAgile,
+      IncAuditor
     ])
   ],
   controllers: [IncorporationController],

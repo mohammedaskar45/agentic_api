@@ -71,6 +71,7 @@ export class IncorporationController {
   @Get('bank') async getBank(@Headers('x-company-id') companyId: string) { return this.incorporationService.getByCompany(companyId); }
   @Get('gst') async getGst(@Headers('x-company-id') companyId: string) { return this.incorporationService.getGst(companyId); }
   @Get('labor') async getLabor(@Headers('x-company-id') companyId: string) { return this.incorporationService.getLabor(companyId); }
+  @Get('auditor') async getAuditor(@Headers('x-company-id') companyId: string) { return this.incorporationService.getByCompany(companyId); }
   @Get('commencement') async getCommencement(@Headers('x-company-id') companyId: string) { return this.incorporationService.getByCompany(companyId); }
   @Get('master-data') async getMasterData(@Headers('x-company-id') companyId: string) { 
     return this.incorporationService.getMasterData(companyId);
@@ -149,6 +150,7 @@ export class IncorporationController {
   @Post('bank') async saveBank(@Headers('x-company-id') companyId: string, @Body() data: any) { return this.incorporationService.saveBank(companyId, data); }
   @Post('gst') async saveGst(@Headers('x-company-id') companyId: string, @Body() data: any) { return this.incorporationService.saveGst(companyId, data); }
   @Post('labor') async saveLabor(@Headers('x-company-id') companyId: string, @Body() data: any) { return this.incorporationService.saveLabor(companyId, data); }
+  @Post('auditor') async saveAuditor(@Headers('x-company-id') companyId: string, @Body() data: any) { return this.incorporationService.saveAuditor(companyId, data); }
   @Post('commencement') async saveCommencement(@Headers('x-company-id') companyId: string, @Body() data: any) { return this.incorporationService.saveCommencement(companyId, data); }
   @Post('master-data') async saveMasterData(@Headers('x-company-id') companyId: string, @Body() data: any) { return this.incorporationService.saveMasterData(companyId, data); }
   @Post('upload')

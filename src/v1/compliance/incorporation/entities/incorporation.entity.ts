@@ -6,6 +6,7 @@ import { IncStakeholder } from './inc-stakeholder.entity';
 import { IncDsc, IncDin, IncRun } from './inc-steps-basic.entity';
 import { IncMoaAoa, IncSpice, IncCoi, IncCommencement } from './inc-steps-advanced.entity';
 import { IncBank, IncAgile } from './inc-steps-final.entity';
+import { IncAuditor } from './inc-auditor.entity';
 
 export interface WorkflowStepStatus {
   id: number;
@@ -59,6 +60,9 @@ export class Incorporation extends BaseEntity {
 
   @OneToOne(() => IncCommencement, (c) => c.incorporation)
   commencement_data: IncCommencement;
+
+  @OneToOne(() => IncAuditor, (a) => a.incorporation)
+  auditor_data: IncAuditor;
 
   @Column({ type: 'jsonb', nullable: true })
   step_uploads: any;
