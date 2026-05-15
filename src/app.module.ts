@@ -11,6 +11,7 @@ import { MenusModule } from './v1/master/menus/menus.module';
 import { AccessControlModule } from './v1/master/access-control/access-control.module';
 import { IncorporationModule } from './v1/compliance/incorporation/incorporation.module';
 import { RightsIssueModule } from './v1/compliance/rights-issue/rights-issue.module';
+import { BuybackModule } from './v1/compliance/buyback/buyback.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { RightsIssueModule } from './v1/compliance/rights-issue/rights-issue.mod
     AccessControlModule,
     IncorporationModule,
     RightsIssueModule,
+    BuybackModule,
   ],
   controllers: [AppController],
   providers: [AppService],

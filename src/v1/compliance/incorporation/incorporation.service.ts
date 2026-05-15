@@ -1037,7 +1037,7 @@ export class IncorporationService {
 
   async getJurisdictionByPin(pin: string) {
     const prefix = pin.substring(0, 2);
-    return PIN_TO_ROC[prefix] || { city: 'Unknown', roc: 'Please select ROC manually', state: 'Unknown' };
+    return (PIN_TO_ROC as any)[prefix] || { city: 'Unknown', roc: 'Please select ROC manually', state: 'Unknown' };
   }
 
   async validateStakeholders(incorporationId: string) {
@@ -1046,10 +1046,12 @@ export class IncorporationService {
       relations: ['stakeholders'],
     });
 
+    if (!record) return [];
+
     return record.stakeholders.map(s => {
       if (s.nationality !== 'Indian') {
         return {
-          stakeholder: s.name,
+          stakeholder: s.full_name,
           requirement: 'APOSTILLE_REQUIRED',
           message: 'As a foreign national, proof of identity and address must be apostilled or notarized in the home country (Rule 13).',
         };
