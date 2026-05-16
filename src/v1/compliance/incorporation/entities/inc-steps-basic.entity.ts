@@ -24,26 +24,11 @@ export class IncDsc {
   @JoinColumn({ name: 'incorporation_id' })
   incorporation: Incorporation;
 
-  @Column({ name: 'full_name', length: 255, nullable: false })
-  full_name: string;
+  @Column({ name: 'directors_data', type: 'jsonb', nullable: true })
+  directors: any[];
 
-  @Column({ name: 'dob', type: 'date', nullable: false })
-  dob: string;
-
-  @Column({ name: 'father_name', length: 255, nullable: false })
-  father_name: string;
-
-  @Column({ name: 'nationality', length: 100, nullable: false })
-  nationality: string;
-
-  @Column({ name: 'pan', length: 20, nullable: false })
-  pan: string;
-
-  @Column({ name: 'aadhaar', length: 20, nullable: false })
-  aadhaar: string;
-
-  @Column({ name: 'status', length: 50, default: 'pending' })
-  status: string;
+  @Column({ name: 'overall_status', length: 50, default: 'pending' })
+  overall_status: string;
 
   @CreateDateColumn({ name: 'created_on', type: 'timestamptz', nullable: false, default: () => 'CURRENT_TIMESTAMP' })
   created_on: Date;

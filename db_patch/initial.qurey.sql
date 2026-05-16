@@ -12,7 +12,7 @@ VALUES
 
 -- 3. INSERT SUPER ADMIN USER
 INSERT INTO public.users(user_id, name, password, mail_id, role_id, status, is_deleted, created_on, created_by, updated_on, updated_by, user_type, first_name, last_name)
-VALUES ('a2b3c4d5-e6f7-4890-abcd-1234567890ef', 'Super Admin', '$2b$10$UedR9gxbq4I0GZpb82sVOeqza4gSpRvcdczhAwd/ACiT7jlf1YkgO', 'admin@compliance.com', '678f24b0-a615-46f9-8664-9f237890f5a1', 'Active', 0, CURRENT_TIMESTAMP, NULL, CURRENT_TIMESTAMP, NULL, 'Admin', 'Super', 'Admin');
+VALUES ('a2b3c4d5-e6f7-4890-abcd-1234567890ef', 'Super Admin', '$2b$10$uc09gbrDn8cS7h3uZrfb0ueo6eWUsku7FJPHfxuNPNidGQeC5YPRa', 'superadmin@gmail.com', '678f24b0-a615-46f9-8664-9f237890f5a1', 'Active', 0, CURRENT_TIMESTAMP, NULL, CURRENT_TIMESTAMP, NULL, 'Admin', 'Super', 'Admin');
 
 -- 4. USER-COMPANY MAPPING (Fixed UUIDs)
 INSERT INTO public.user_company_mapping(mapping_id, user_id, company_id, is_primary, status, is_deleted, created_on)

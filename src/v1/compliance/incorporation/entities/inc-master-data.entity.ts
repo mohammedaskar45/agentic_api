@@ -32,6 +32,9 @@ export class IncMasterData {
   @Column({ name: 'alternative_name', length: 255, nullable: true })
   alternative_name: string;
 
+  @Column({ name: 'cin', length: 50, nullable: true })
+  cin: string;
+
   @Column({ name: 'company_type', length: 100, nullable: false })
   company_type: string;
 
@@ -56,7 +59,36 @@ export class IncMasterData {
   @Column({ name: 'registered_address', type: 'text', nullable: false })
   registered_address: string;
 
-  // Professional Details
+  @Column({ name: 'official_email', length: 255, nullable: true })
+  official_email: string;
+
+  @Column({ name: 'official_phone', length: 50, nullable: true })
+  official_phone: string;
+
+  // Registered Office Statutory Details
+  @Column({ name: 'office_ownership_type', length: 100, nullable: true })
+  office_ownership_type: string;
+
+  @Column({ name: 'office_owner_name', length: 255, nullable: true })
+  office_owner_name: string;
+
+  @Column({ name: 'utility_bill_type', length: 100, nullable: true })
+  utility_bill_type: string;
+
+  @Column({ name: 'utility_bill_file_id', type: 'uuid', nullable: true })
+  utility_bill_file_id: string;
+
+  @Column({ name: 'noc_file_id', type: 'uuid', nullable: true })
+  noc_file_id: string;
+
+  // Capital Expansion (Table 3.1)
+  @Column({ name: 'preference_capital', type: 'decimal', precision: 15, scale: 2, default: 0 })
+  preference_capital: number;
+
+  @Column({ name: 'preference_face_value', type: 'decimal', precision: 10, scale: 2, default: 10 })
+  preference_face_value: number;
+
+  // Professional Details (Table 3.3)
   @Column({ name: 'ca_cs_name', length: 255, nullable: false })
   ca_cs_name: string;
 
@@ -81,23 +113,13 @@ export class IncMasterData {
   @Column({ name: 'bank_account', length: 100, nullable: false })
   bank_account: string;
 
-  // Registered Office Statutory Details
-  @Column({ name: 'office_ownership_type', length: 100, nullable: true })
-  office_ownership_type: string;
+  @Column({ name: 'police_station', length: 255, nullable: true })
+  police_station: string;
 
-  @Column({ name: 'office_owner_name', length: 255, nullable: true })
-  office_owner_name: string;
+  @Column({ name: 'jurisdiction', length: 255, nullable: true })
+  jurisdiction: string;
 
-  @Column({ name: 'utility_bill_type', length: 100, nullable: true })
-  utility_bill_type: string;
-
-  @Column({ name: 'utility_bill_file_id', type: 'uuid', nullable: true })
-  utility_bill_file_id: string;
-
-  @Column({ name: 'noc_file_id', type: 'uuid', nullable: true })
-  noc_file_id: string;
-
-  // MoA/AoA Witness Details
+  // MoA/AoA Witness Details (Table 3.4)
   @Column({ name: 'witness_name', length: 255, nullable: true })
   witness_name: string;
 
@@ -109,13 +131,6 @@ export class IncMasterData {
 
   @Column({ name: 'witness_occupation', length: 100, nullable: true })
   witness_occupation: string;
-
-  // Capital Expansion
-  @Column({ name: 'preference_capital', type: 'decimal', precision: 15, scale: 2, default: 0 })
-  preference_capital: number;
-
-  @Column({ name: 'preference_face_value', type: 'decimal', precision: 10, scale: 2, default: 10 })
-  preference_face_value: number;
 
   @Column({ name: 'status', default: 1, nullable: false })
   status: number;

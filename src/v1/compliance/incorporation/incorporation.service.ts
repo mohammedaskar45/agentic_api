@@ -2,6 +2,8 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import * as fs from 'fs';
+import { PDFParse } from 'pdf-parse';
 import {
   Incorporation,
   WorkflowStepStatus,
@@ -84,7 +86,7 @@ export class IncorporationService {
       data = this.incorporationRepository.create({
         company_id: companyId,
         current_step_id: 0,
-        workflow_status: Array.from({ length: 13 }, (_, i) => ({
+        workflow_status: Array.from({ length: 10 }, (_, i) => ({
           id: i,
           status: i === 0 ? 'current' : 'upcoming',
         })) as WorkflowStepStatus[],
@@ -96,15 +98,29 @@ export class IncorporationService {
         'Initial incorporation record created with 12-step workflow.',
       );
     } else {
-      // Migration: Ensure Step 0 exists in existing records
-      const hasStep0 = data.workflow_status.some((s: any) => s.id === 0);
-      if (!hasStep0) {
-        data.workflow_status.unshift({
-          id: 0,
-          status: data.master_data ? 'completed' : 'current',
+      // Auto-fix / Migration: Ensure 10 steps and strict exclusivity
+      const currentId = data.current_step_id || 0;
+      let changed = false;
+
+      // Ensure 10 steps
+      if (data.workflow_status.length !== 10) {
+        data.workflow_status = Array.from({ length: 10 }, (_, i) => ({
+          id: i,
+          status: i < currentId ? 'completed' : (i === currentId ? 'current' : 'upcoming'),
+        })) as WorkflowStepStatus[];
+        changed = true;
+      } else {
+        // Fix statuses based on currentId
+        data.workflow_status.forEach((s: WorkflowStepStatus) => {
+          const expectedStatus = s.id < currentId ? 'completed' : (s.id === currentId ? 'current' : 'upcoming');
+          if (s.status !== expectedStatus) {
+            s.status = expectedStatus;
+            changed = true;
+          }
         });
-        // If we added step 0 and it's current, set current_step_id to 0
-        if (!data.master_data) data.current_step_id = 0;
+      }
+
+      if (changed) {
         await this.incorporationRepository.save(data);
       }
     }
@@ -131,18 +147,21 @@ export class IncorporationService {
     ).length;
     const vaultFiles = completedSteps * 2;
 
+    const totalSteps = record.workflow_status.length || 12;
+
     return {
       daysElapsed: daysElapsed || 1,
       pendingTasks: pendingTasks,
       vaultFiles: vaultFiles || 0,
-      progress: Math.round((completedSteps / 13) * 100),
+      progress: Math.round((completedSteps / totalSteps) * 100),
+      current_step_id: record.current_step_id,
       deadlines: this.getComplianceDeadlines(record),
     };
   }
 
   public getComplianceDeadlines(record: Incorporation) {
-    const coiDate = record.coi_data?.registration_date
-      ? new Date(record.coi_data.registration_date)
+    const coiDate = (record.coi_data?.registration_date || record.coi_data?.incorporation_date)
+      ? new Date(record.coi_data.registration_date || record.coi_data.incorporation_date)
       : null;
 
     if (!coiDate) return [];
@@ -230,8 +249,7 @@ export class IncorporationService {
       ...data.company, 
       ...data.professionals,
       ...data.witness,
-      preference_capital: data.capital?.preference_capital || 0,
-      preference_face_value: data.capital?.preference_face_value || 10
+      official_email: data.company?.official_email
     });
 
     record.master_data = await this.incorporationRepository.manager.save(
@@ -276,9 +294,6 @@ export class IncorporationService {
 
         Object.assign(stakeholder, {
           ...sData,
-          is_foreign_national: sData.is_foreign_national || false,
-          passport_number: sData.passport_number,
-          oci_number: sData.oci_number,
           incorporation_id: record.incorporation_id,
         });
 
@@ -323,6 +338,7 @@ export class IncorporationService {
     const {
       proposed_name,
       alternative_name,
+      cin,
       company_type,
       main_objects,
       ancillary_objects,
@@ -331,11 +347,9 @@ export class IncorporationService {
       face_value,
       state,
       registered_address,
-      office_ownership_type,
-      office_owner_name,
-      utility_bill_type,
-      utility_bill_file_id,
-      noc_file_id,
+      official_email,
+      police_station,
+      jurisdiction,
       ca_cs_name,
       membership_no,
       auditor_name,
@@ -348,14 +362,13 @@ export class IncorporationService {
       witness_father_name,
       witness_address,
       witness_occupation,
-      preference_capital,
-      preference_face_value,
     } = record.master_data;
 
     return {
       company: {
         proposed_name,
         alternative_name,
+        cin,
         company_type,
         main_objects,
         ancillary_objects,
@@ -364,11 +377,10 @@ export class IncorporationService {
         face_value,
         state,
         registered_address,
-        office_ownership_type,
-        office_owner_name,
-        utility_bill_type,
-        utility_bill_file_id,
-        noc_file_id,
+        official_email,
+        bank_name,
+        police_station,
+        jurisdiction,
       },
       professionals: {
         ca_cs_name,
@@ -385,13 +397,6 @@ export class IncorporationService {
         witness_father_name,
         witness_address,
         witness_occupation,
-      },
-      capital: {
-        authorised_capital: record.master_data.authorised_capital,
-        paid_up_capital: record.master_data.paid_up_capital,
-        face_value: record.master_data.face_value,
-        preference_capital,
-        preference_face_value,
       },
       stakeholders: (record.stakeholders || []).map((s) => ({
         ...s,
@@ -476,7 +481,12 @@ export class IncorporationService {
       this.incorporationRepository.manager.create(IncDsc, {
         incorporation_id: record.incorporation_id,
       });
-    Object.assign(dsc, dscData);
+    
+    // dscData should contain { directors: [...] }
+    if (dscData.directors) {
+      dsc.directors = dscData.directors;
+    }
+    
     record.dsc_data = await this.incorporationRepository.manager.save(
       IncDsc,
       dsc,
@@ -546,10 +556,10 @@ export class IncorporationService {
       proposed_name_1: runData.proposed_name || 'PENDING',
       proposed_name_2: runData.proposed_name_2 || '',
       nic_code: runData.nic_code,
-      nic_code_id: runData.nic_code_id,
+      nic_code_id: runData.nic_code_id || null,
       sector_category: runData.sector_category,
       trademark_confirmed: runData.trademark_confirmed || false,
-      tm_certificate_ref: runData.tm_certificate_ref,
+      tm_certificate_ref: runData.tm_certificate_ref || null,
       significance: runData.significance,
       objectives_summary: runData.main_objects || runData.significance,
     });
@@ -577,20 +587,24 @@ export class IncorporationService {
     companyId: string,
     stepId: number,
     fileMetadata: any,
+    subId?: string,
   ): Promise<Incorporation> {
     const record = await this.getByCompany(companyId);
     if (!record.step_uploads) record.step_uploads = {};
+    
+    const key = subId ? `${stepId}_${subId}` : `${stepId}`;
 
-    record.step_uploads[stepId] = {
+    record.step_uploads[key] = {
       ...fileMetadata,
       status: 'pending',
+      sub_id: subId,
     };
 
     await this.logEvent(
       companyId,
       'DOC_UPLOADED',
-      `Document uploaded for Step ${stepId}: ${fileMetadata.filename}`,
-      { filename: fileMetadata.filename },
+      `Document uploaded for Step ${stepId}${subId ? ` (Stakeholder: ${subId})` : ''}: ${fileMetadata.filename}`,
+      { filename: fileMetadata.filename, subId },
     );
     return await this.incorporationRepository.save(record);
   }
@@ -598,19 +612,112 @@ export class IncorporationService {
   async verifyDocument(
     companyId: string,
     stepId: number,
-  ): Promise<Incorporation> {
+    subId?: string,
+  ): Promise<any> {
     const record = await this.getByCompany(companyId);
-    if (record.step_uploads && record.step_uploads[stepId]) {
-      record.step_uploads[stepId].status = 'verified';
-      record.step_uploads[stepId].verified_at = new Date();
-      record.step_uploads[stepId].verification_result = 'MATCHED'; // Simulated AI match
+    const key = subId ? `${stepId}_${subId}` : `${stepId}`;
+    
+    if (!record.step_uploads || !record.step_uploads[key]) {
+      throw new Error('No document found to verify.');
+    }
+
+    const upload = record.step_uploads[key];
+    const filePath = upload.path;
+
+    if (!fs.existsSync(filePath)) {
+      throw new Error('File not found on server.');
+    }
+
+    try {
+      // 1. Read PDF Content
+      const dataBuffer = fs.readFileSync(filePath);
+      const parser = new PDFParse({ data: dataBuffer });
+      const data = await parser.getText();
+      const content = data.text.toUpperCase();
+
+      // 2. Get Target Data for comparison
+      let targetName = '';
+      let targetPan = '';
+      let targetDob = '';
+
+      if (stepId === 1 && subId) {
+        const stakeholder = record.stakeholders?.find(s => s.inc_stakeholder_id === subId);
+        if (stakeholder) {
+          targetName = stakeholder.full_name.toUpperCase();
+          targetPan = stakeholder.pan.toUpperCase();
+          targetDob = stakeholder.dob; // Format: YYYY-MM-DD
+        }
+      }
+
+      // 3. Validation Logic
+      const errors = [];
+      if (targetName && !content.includes(targetName)) {
+        errors.push(`Name Mismatch: Expected "${targetName}" not found in document.`);
+      }
+      if (targetPan && !content.includes(targetPan)) {
+        errors.push(`PAN Mismatch: Expected "${targetPan}" not found in document.`);
+      }
+      // Simple DOB check (looking for parts of it)
+      if (targetDob) {
+        const dobParts = targetDob.split('-'); // [2026, 05, 16]
+        const hasYear = content.includes(dobParts[0]);
+        const hasDay = content.includes(dobParts[2]);
+        if (!hasYear || !hasDay) {
+          errors.push(`DOB Mismatch: Expected date "${targetDob}" not found.`);
+        }
+      }
+
+      if (errors.length > 0) {
+        upload.status = 'failed';
+        upload.verification_result = 'MISMATCH';
+        upload.errors = errors;
+        await this.incorporationRepository.save(record);
+        return { success: false, errors };
+      }
+
+      // 4. Success
+      upload.status = 'verified';
+      upload.verified_at = new Date();
+      upload.verification_result = 'MATCHED';
+      
       await this.logEvent(
         companyId,
         'DOC_VERIFIED',
-        `AI Verification completed for Step ${stepId}: ${record.step_uploads[stepId].filename} matched requirements.`,
-        { stepId, filename: record.step_uploads[stepId].filename },
+        `AI Content Verification passed for Step ${stepId}: ${upload.filename}`,
+        { stepId, subId, filename: upload.filename },
       );
+
+      await this.incorporationRepository.save(record);
+      return { success: true };
+    } catch (error) {
+      console.error('PDF Parse Error:', error);
+      throw new Error('Failed to parse document content.');
     }
+  }
+
+  async saveMeeting(companyId: string, meetingData: any): Promise<Incorporation> {
+    const record = await this.getByCompany(companyId);
+    if (!record.metadata) record.metadata = {};
+
+    record.metadata.first_board_meeting = {
+      date: meetingData.date,
+      time: meetingData.time,
+      venue: meetingData.venue || record.master_data?.registered_address,
+      scheduled_at: new Date(),
+    };
+
+    const step = record.workflow_status.find(
+      (s: WorkflowStepStatus) => s.id === 7,
+    );
+    if (step && step.status !== 'completed') {
+      step.status = 'completed';
+      const nextStep = record.workflow_status.find(
+        (s: WorkflowStepStatus) => s.id === 8,
+      );
+      if (nextStep) nextStep.status = 'current';
+      record.current_step_id = 8;
+    }
+
     return await this.incorporationRepository.save(record);
   }
 
@@ -620,57 +727,173 @@ export class IncorporationService {
       throw new Error('Master Data missing. Please complete Step 0 first.');
     }
 
-    const company = record.master_data; // This now contains both company and professional details
+    const company = record.master_data;
     const stakeholders = record.stakeholders || [];
-    const companyName = company.proposed_name || 'PROPOSED COMPANY NAME';
+    const companyName = (company.proposed_name || 'PROPOSED COMPANY NAME').toUpperCase();
+    const state = company.state || 'Tamil Nadu';
+    const regAddress = company.registered_address || '[Registered Office Address]';
+    
+    // Meeting Details from Metadata (The Automation)
+    const meeting = record.metadata?.first_board_meeting || {};
+    const mDate = meeting.date || '________';
+    const mTime = meeting.time || '________';
+    const mVenue = meeting.venue || regAddress;
 
-    const documents = [
+    // Fix Share Math: Ensure whole numbers
+    const totalCapital = Number(company.authorised_capital) || 100000;
+    const faceValue = Number(company.face_value) || 10;
+    const totalShares = Math.floor(totalCapital / faceValue);
+    
+    const paidUpCapital = Number(company.paid_up_capital) || 10000;
+    const paidUpShares = Math.floor(paidUpCapital / faceValue);
+
+    // Prepare Subscriber list string for MoA/AoA
+    const subscriberList = stakeholders.map((s, idx) => `${idx + 1}. ${s.full_name.toUpperCase()}`).join('\n');
+    const allNames = stakeholders.map(s => s.full_name.toUpperCase()).join(', ');
+
+    const documents: any[] = [
+      // 1. Constitutional Documents (2)
       {
         id: 'moa',
         title: 'Memorandum of Association (MoA)',
         category: 'Constitutional',
-        content: `THE COMPANIES ACT, 2013\n(Company Limited by Shares)\n\nMEMORANDUM OF ASSOCIATION OF\n${companyName}\n\nI. The name of the company is ${companyName}.\n\nII. The registered office of the company will be situated in the State of ${company.state}.\n\nIII. (a) The objects to be pursued by the company on its incorporation are:\n1. To carry on the business of ${company.main_objects} and related IT/Compliance services.\n2. To provide technology-driven solutions for corporate governance.\n\n(b) Matters which are necessary for furtherance of the objects specified in clause III(a) are:\n${company.ancillary_objects || 'Standard ancillary objects as per Table A.'}\n\nIV. The liability of the member(s) is limited.\n\nV. The share capital of the company is Rs. ${company.authorised_capital} divided into ${Number(company.authorised_capital) / Number(company.face_value)} equity shares of Rs. ${company.face_value} each.\n\nSigned by Subscribers:\n${stakeholders.map((s: any) => `- ${s.full_name}`).join('\n')}`,
+        content: `THE COMPANIES ACT, 2013\n(Company Limited by Shares)\n\nMEMORANDUM OF ASSOCIATION OF\n${companyName}\n\nI. The name of the company is ${companyName}.\n\nII. The registered office of the company will be situated in the State of ${state}.\n\nIII. (a) The objects to be pursued by the company on its incorporation are:\n1. To carry on the business of ${company.main_objects.replace(/^To provide/i, 'providing').replace(/^To carry on/i, 'carrying on')} and to act as a solution provider in the field of technology and corporate compliance.\n\n(b) Matters necessary for furtherance of the objects:\nStandard ancillary objects as per Table A.\n\nIV. The liability of the member(s) is limited.\n\nV. The share capital of the company is Rs. ${totalCapital.toLocaleString('en-IN')} divided into ${totalShares.toLocaleString('en-IN')} Equity Shares of Rs. ${faceValue} each.\n\nLIST OF SUBSCRIBERS:\n${subscriberList}`,
       },
       {
         id: 'aoa',
         title: 'Articles of Association (AoA)',
         category: 'Constitutional',
-        content: `THE COMPANIES ACT, 2013\n(Company Limited by Shares)\n\nARTICLES OF ASSOCIATION OF\n${companyName}\n\n1. The regulations contained in Table 'F' in Schedule I to the Companies Act, 2013 shall apply to this Company so far as they are not inconsistent with the following articles.\n\n2. INTERPRETATION: In these articles, unless the context otherwise requires, expressions defined in the Act shall have the same meaning.\n\n3. PRIVATE COMPANY: The Company is a Private Company within the meaning of Section 2(68) of the Companies Act, 2013.\n\n4. SHARE CAPITAL: The Authorised Share Capital is Rs. ${company.authorised_capital}.\n\nSigned by Subscribers:\n${stakeholders.map((s: any) => `- ${s.full_name}`).join('\n')}`,
-      },
-      {
-        id: 'dir2',
-        title: 'DIR-2: Consent to act as Director',
-        category: 'Pre-Incorporation',
-        content: `FORM DIR-2\n(Pursuant to Section 152(5) and Rule 8 of Companies Appointment and Qualification of Directors Rules, 2014)\n\nTo,\nTHE BOARD OF DIRECTORS,\n${companyName}\n\nSubject: Consent to act as Director of ${companyName}\n\nI, ${stakeholders[0]?.full_name || 'Director'}, hereby give my consent to act as director of ${companyName} pursuant to sub-section (5) of section 152 of the Companies Act, 2013.\n\nDetails:\nPAN: ${stakeholders[0]?.pan}\nDOB: ${stakeholders[0]?.dob}\nAddress: ${stakeholders[0]?.address}\n\nSignature: ________________`,
-      },
-      {
-        id: 'inc9',
-        title: 'INC-9: Declaration by Subscribers and First Directors',
-        category: 'Pre-Incorporation',
-        content: `FORM INC-9\n(Pursuant to Section 7(1)(c) of the Companies Act, 2013)\n\nI, ${stakeholders[0]?.full_name || 'Subscriber'}, being the subscriber/director to the memorandum/articles of association of ${companyName}, do hereby solemnly declare and ought to state that:\n\n1. I have not been convicted of any offence in connection with the promotion, formation or management of any company during the preceding five years.\n2. I have not been found guilty of any fraud or misfeasance or of any breach of duty to any company under this Act during the preceding five years.\n\nDate: ${new Date().toLocaleDateString()}\nSignature: ________________`,
-      },
-      {
-        id: 'br_first_meeting',
-        title: 'Board Resolution: First Board Meeting',
-        category: 'Post-Incorporation',
-        content: `CERTIFIED TRUE COPY OF THE RESOLUTION PASSED AT THE FIRST MEETING OF THE BOARD OF DIRECTORS OF ${companyName} HELD ON ________ AT ________ AT THE REGISTERED OFFICE OF THE COMPANY.\n\n"RESOLVED THAT the Certificate of Incorporation dated ________ issued by the Registrar of Companies, ${company.state} be and is hereby noted."\n\n"RESOLVED FURTHER THAT ${stakeholders[0]?.full_name || 'Director'} be and is hereby elected as the Chairman of the Board of Directors of the Company."\n\n"RESOLVED FURTHER THAT the first auditors of the company, M/s ${company.auditor_name || 'Statutory Auditors'}, Chartered Accountants, be and are hereby appointed to hold office until the conclusion of the first Annual General Meeting."`,
-      },
-      {
-        id: 'auditor_consent',
-        title: 'Auditor Consent & Certificate',
-        category: 'Post-Incorporation',
-        content: `To,\nThe Board of Directors,\n${companyName}\n\nSubject: Consent and Certificate for appointment as Statutory Auditors under Section 139 of the Companies Act, 2013.\n\nDear Sirs,\n\nWe, M/s ${company.auditor_name || 'Auditor Firm'}, Chartered Accountants, hereby provide our consent for appointment as the first statutory auditors of ${companyName}.\n\nWe further certify that the appointment, if made, shall be within the limits specified under Section 141 of the Companies Act, 2013.\n\nFor ${company.auditor_name || 'Auditor Firm'},\nChartered Accountants\n(Signature)`,
-      },
-      {
-        id: 'br_commencement',
-        title: 'Board Resolution: Commencement of Business (INC-20A)',
-        category: 'Post-Incorporation',
-        content: `CERTIFIED TRUE COPY OF THE RESOLUTION PASSED BY THE BOARD OF DIRECTORS OF ${companyName}.\n\n"RESOLVED THAT the Board hereby takes note that all the subscribers to the Memorandum of Association have paid the value of shares agreed to be taken by them and the credit of the same has been received in the Company's Bank Account with ${company.bank_name || 'the Bank'}."\n\n"RESOLVED FURTHER THAT any director of the company be and is hereby authorised to file Form INC-20A with the Registrar of Companies."`,
+        content: `THE COMPANIES ACT, 2013\n(Company Limited by Shares)\n\nARTICLES OF ASSOCIATION OF\n${companyName}\n\n1. The regulations contained in Table 'F' in Schedule I to the Companies Act, 2013 shall apply.\n\n2. The Company is a "Private Company" as per Section 2(68).\n\n3. The Authorised Share Capital is Rs. ${totalCapital.toLocaleString('en-IN')}.\n\nSUBSCRIBERS:\n${allNames}`,
       },
     ];
 
+    // 2. Pre-Incorporation Documents (Per Stakeholder)
+    stakeholders.forEach(s => {
+      const name = s.full_name.toUpperCase();
+      documents.push({
+        id: `dir2_${s.inc_stakeholder_id}`,
+        title: `DIR-2: ${s.full_name}`,
+        category: 'Pre-Incorporation',
+        content: `FORM DIR-2\n(Consent to act as Director)\n\nTo,\nThe Board of Directors,\n${companyName}\n\nI, ${name}, hereby give my consent to act as director of ${companyName} pursuant to Section 152(5) of the Companies Act, 2013.\n\nPAN: ${s.pan}\nDIN/Passport: ${s.existing_din || 'Applied For'}\nAddress: ${s.residential_address}`,
+      });
+      
+      documents.push({
+        id: `inc9_${s.inc_stakeholder_id}`,
+        title: `INC-9: ${s.full_name}`,
+        category: 'Pre-Incorporation',
+        content: `FORM INC-9\n(Declaration by Subscriber/Director)\n\nI, ${name}, do hereby solemnly declare that I have not been convicted of any offence in connection with the promotion or management of any company.\n\nDate: ${new Date().toLocaleDateString()}`,
+      });
+    });
+
+    documents.push({
+      id: 'noc_office',
+      title: 'NOC for Registered Office',
+      category: 'Pre-Incorporation',
+      content: `NO OBJECTION CERTIFICATE\n\nI, ________________, owner of ${regAddress}, hereby declare no objection to ${companyName} using the premises as its Registered Office.`,
+    });
+
+    // 3. Board Meeting Documents
+    documents.push({
+      id: 'bm_notice',
+      title: 'Notice of First Board Meeting',
+      category: 'Board Meeting',
+      content: `NOTICE TO ALL DIRECTORS\n\nNotice is hereby given that the first Board Meeting of ${companyName} will be held on ${mDate} at ${mTime} at ${mVenue}.\n\nDirectors: ${allNames}`,
+    });
+    
+    documents.push({
+      id: 'bm_agenda',
+      title: 'Agenda of First Board Meeting',
+      category: 'Board Meeting',
+      content: `AGENDA\n1. Appoint Chairman\n2. Note COI\n3. Appoint Auditors\n4. Open Bank Account`,
+    });
+
+    documents.push({
+      id: 'bm_minutes',
+      title: 'Minutes of First Board Meeting',
+      category: 'Board Meeting',
+      content: `MINUTES OF THE FIRST BOARD MEETING OF ${companyName}\n\nHELD ON: ${mDate}\nTIME: ${mTime}\nVENUE: ${mVenue}\n\nPRESENT: ${allNames}\n\nCHAIRMAN: ${stakeholders[0]?.full_name.toUpperCase()} was elected Chairman.`,
+    });
+
+    documents.push({
+      id: 'br_bank',
+      title: 'Board Resolution: Bank Account Opening',
+      category: 'Board Meeting',
+      content: `RESOLUTION\n\n"RESOLVED THAT a Current Account be opened with ${company.bank_name || 'Bank'} and ${stakeholders[0]?.full_name.toUpperCase()} be authorised to operate the same."`,
+    });
+
+    // 4. Auditor Documents (Single Set)
+    documents.push({
+      id: 'br_auditor',
+      title: 'Board Resolution: Auditor Appointment',
+      category: 'Auditor',
+      content: `RESOLUTION\n\n"RESOLVED THAT M/s ${company.auditor_name} be appointed as First Auditors."`,
+    });
+    
+    documents.push({
+      id: 'auditor_consent',
+      title: 'Auditor Consent Letter',
+      category: 'Auditor',
+      content: `CONSENT\n\nWe, M/s ${company.auditor_name}, give our consent to be appointed as auditors of ${companyName}.`,
+    });
+
+    documents.push({
+      id: 'auditor_intimation',
+      title: 'Intimation to Auditor',
+      category: 'Auditor',
+      content: `INTIMATION\n\nWe inform you that the Board has appointed your firm as Auditors of ${companyName}.`,
+    });
+
+    documents.push({
+      id: 'adt1_draft',
+      title: 'ADT-1 Pre-fill Content',
+      category: 'Auditor',
+      content: `DRAFT ADT-1\nAuditor: ${company.auditor_name}\nPAN: ${company.auditor_frn}`,
+    });
+
+    // 5. Commencement Documents
+    documents.push({
+      id: 'br_commencement',
+      title: 'Board Resolution: Commencement of Business',
+      category: 'Commencement',
+      content: `RESOLUTION\n\n"RESOLVED THAT the Board takes note that the subscription money of Rs. ${paidUpCapital} has been received."`,
+    });
+    
+    documents.push({
+      id: 'inc20a_decl',
+      title: 'Declaration for INC-20A',
+      category: 'Commencement',
+      content: `DECLARATION\n\nI, ${stakeholders[0]?.full_name.toUpperCase()}, verify that the subscribers have paid the share value.`,
+    });
+
+    documents.push({
+      id: 'prof_cert_20a',
+      title: 'Professional Certificate for INC-20A',
+      category: 'Commencement',
+      content: `CERTIFICATE\n\nI, ${company.ca_cs_name}, certify that the subscription money has been received by ${companyName}.`,
+    });
+
+    // 6. Other Statutory (Per Subscriber for Share Certs)
+    stakeholders.forEach(s => {
+      documents.push({
+        id: `share_cert_${s.inc_stakeholder_id}`,
+        title: `Share Certificate: ${s.full_name}`,
+        category: 'Other Statutory',
+        content: `SHARE CERTIFICATE\n\nThis is to certify that ${s.full_name.toUpperCase()} is the holder of shares in ${companyName}.`,
+      });
+    });
+
+    documents.push({
+      id: 'br_seal',
+      title: 'Board Resolution: Adoption of Common Seal',
+      category: 'Other Statutory',
+      content: `RESOLUTION\n\n"RESOLVED THAT the Common Seal be adopted."`,
+    });
+
     return documents;
   }
+
+
+
 
   async saveMoaAoa(companyId: string, moaAoaData: any): Promise<Incorporation> {
     const record = await this.getByCompany(companyId);
@@ -776,6 +999,19 @@ export class IncorporationService {
       IncCoi,
       coi,
     );
+
+    const step = record.workflow_status.find(
+      (s: WorkflowStepStatus) => s.id === 6,
+    );
+    if (step && step.status !== 'completed') {
+      step.status = 'completed';
+      const nextStep = record.workflow_status.find(
+        (s: WorkflowStepStatus) => s.id === 7,
+      );
+      if (nextStep) nextStep.status = 'current';
+      record.current_step_id = 7;
+    }
+
     return await this.incorporationRepository.save(record);
   }
 
@@ -825,11 +1061,12 @@ export class IncorporationService {
       });
     Object.assign(bank, {
       bank_name: bankData.bank_name,
-      account_number: bankData.account_number,
-      ifsc_code: bankData.ifsc_code,
+      account_number: bankData.account_number || null,
+      ifsc_code: bankData.ifsc_code || null,
       branch_name: bankData.branch_name,
       branch: bankData.branch_name || bankData.branch || 'Main Branch',
       account_type: bankData.account_type,
+      application_status: bankData.application_status || 'pending',
     });
     record.bank_data = await this.incorporationRepository.manager.save(
       IncBank,
@@ -839,7 +1076,7 @@ export class IncorporationService {
     const step = record.workflow_status.find(
       (s: WorkflowStepStatus) => s.id === 8,
     );
-    if (step && step.status !== 'completed') {
+    if (step && step.status !== 'completed' && bankData.application_status === 'active') {
       step.status = 'completed';
       const nextStep = record.workflow_status.find(
         (s: WorkflowStepStatus) => s.id === 9,
@@ -876,15 +1113,15 @@ export class IncorporationService {
     );
 
     const step = record.workflow_status.find(
-      (s: WorkflowStepStatus) => s.id === 9,
+      (s: WorkflowStepStatus) => s.id === 6,
     );
     if (step && step.status !== 'completed') {
       step.status = 'completed';
       const nextStep = record.workflow_status.find(
-        (s: WorkflowStepStatus) => s.id === 10,
+        (s: WorkflowStepStatus) => s.id === 7,
       );
       if (nextStep) nextStep.status = 'current';
-      record.current_step_id = 10;
+      record.current_step_id = 7;
     }
     return await this.incorporationRepository.save(record);
   }
@@ -910,15 +1147,15 @@ export class IncorporationService {
     );
 
     const step = record.workflow_status.find(
-      (s: WorkflowStepStatus) => s.id === 10,
+      (s: WorkflowStepStatus) => s.id === 6,
     );
     if (step && step.status !== 'completed') {
       step.status = 'completed';
       const nextStep = record.workflow_status.find(
-        (s: WorkflowStepStatus) => s.id === 11,
+        (s: WorkflowStepStatus) => s.id === 7,
       );
       if (nextStep) nextStep.status = 'current';
-      record.current_step_id = 11;
+      record.current_step_id = 7;
     }
     return await this.incorporationRepository.save(record);
   }
@@ -948,15 +1185,15 @@ export class IncorporationService {
     );
 
     const step = record.workflow_status.find(
-      (s: WorkflowStepStatus) => s.id === 11,
+      (s: WorkflowStepStatus) => s.id === 8,
     );
     if (step && step.status !== 'completed') {
       step.status = 'completed';
       const nextStep = record.workflow_status.find(
-        (s: WorkflowStepStatus) => s.id === 12,
+        (s: WorkflowStepStatus) => s.id === 9,
       );
       if (nextStep) nextStep.status = 'current';
-      record.current_step_id = 12;
+      record.current_step_id = 9;
     }
 
     await this.logEvent(
@@ -990,10 +1227,11 @@ export class IncorporationService {
     );
 
     const step = record.workflow_status.find(
-      (s: WorkflowStepStatus) => s.id === 12,
+      (s: WorkflowStepStatus) => s.id === 9,
     );
     if (step && step.status !== 'completed') {
       step.status = 'completed';
+      record.current_step_id = 10;
     }
     return await this.incorporationRepository.save(record);
   }
@@ -1043,20 +1281,65 @@ export class IncorporationService {
   async validateStakeholders(incorporationId: string) {
     const record = await this.incorporationRepository.findOne({
       where: { incorporation_id: incorporationId },
-      relations: ['stakeholders'],
+      relations: ['stakeholders', 'master_data'],
     });
 
     if (!record) return [];
 
-    return record.stakeholders.map(s => {
+    const reports: any[] = [];
+    const stakeholders = record.stakeholders || [];
+
+    // 1. Nationality/Apostille check
+    stakeholders.forEach(s => {
       if (s.nationality !== 'Indian') {
-        return {
+        reports.push({
           stakeholder: s.full_name,
           requirement: 'APOSTILLE_REQUIRED',
-          message: 'As a foreign national, proof of identity and address must be apostilled or notarized in the home country (Rule 13).',
-        };
+          message: 'Foreign national documents must be apostilled in their home country (Rule 13).',
+        });
       }
-      return null;
-    }).filter(v => v !== null);
+    });
+
+    // 2. Minimum Stakeholders (for Pvt Ltd)
+    if (stakeholders.length < 2) {
+      reports.push({
+        stakeholder: 'Company Structure',
+        requirement: 'MIN_2_SUBSCRIBERS',
+        message: 'A Private Limited company requires a minimum of 2 subscribers/directors.',
+      });
+    }
+
+    // 3. Resident Director Check
+    const hasResident = stakeholders.some(s => s.nationality === 'Indian');
+    if (!hasResident && stakeholders.length > 0) {
+      reports.push({
+        stakeholder: 'Board Composition',
+        requirement: 'RESIDENT_DIRECTOR_REQUIRED',
+        message: 'At least one director must be an Indian resident (stayed in India for ≥ 182 days).',
+      });
+    }
+
+    // 4. DIN Check
+    stakeholders.forEach(s => {
+      const hasDin = s.existing_din && s.existing_din.trim().length > 0;
+      if (!hasDin) {
+        reports.push({
+          stakeholder: s.full_name,
+          requirement: 'DIN_APPLICATION',
+          message: 'Director Identification Number (DIN) will be applied through SPICe+ (Step 5).',
+        });
+      }
+    });
+
+    // 5. Authorized Capital Check
+    if (record.master_data && (Number(record.master_data.authorised_capital) || 0) < 100000) {
+      reports.push({
+        stakeholder: 'Capitalization',
+        requirement: 'CAPITAL_ADVISORY',
+        message: 'Suggested minimum authorized capital is ₹1,00,000 for standard Private Limited compliance.',
+      });
+    }
+
+    return reports;
   }
 }

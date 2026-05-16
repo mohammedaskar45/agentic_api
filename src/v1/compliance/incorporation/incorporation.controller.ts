@@ -36,6 +36,12 @@ export class IncorporationController {
     return this.incorporationService.getLogs(companyId);
   }
 
+  @Get('analysis')
+  async getAnalysis(@Headers('x-company-id') companyId: string) {
+    const record = await this.incorporationService.getByCompany(companyId);
+    return this.incorporationService.validateStakeholders(record.incorporation_id);
+  }
+
   // Adding specific GET routes for DSC and DIN
   @Get('dsc')
   async getDsc(@Headers('x-company-id') companyId: string) {
@@ -166,6 +172,7 @@ export class IncorporationController {
   async upload(
     @Headers('x-company-id') companyId: string, 
     @Body('stepId') stepId: string, 
+    @Body('subId') subId: string,
     @UploadedFile() file: Express.Multer.File
   ) { 
     return this.incorporationService.uploadDocument(companyId, parseInt(stepId), { 
@@ -173,7 +180,17 @@ export class IncorporationController {
       path: file.path,
       mimetype: file.mimetype,
       size: file.size
-    }); 
+    }, subId); 
   }
-  @Post('verify') async verify(@Headers('x-company-id') companyId: string, @Body() body: { stepId: number }) { return this.incorporationService.verifyDocument(companyId, body.stepId); }
+  @Post('verify') async verify(@Headers('x-company-id') companyId: string, @Body() body: { stepId: number, subId?: string }) { 
+    return this.incorporationService.verifyDocument(companyId, body.stepId, body.subId); 
+  }
+
+  @Post('save-meeting')
+  async saveMeeting(
+    @Headers('x-company-id') companyId: string,
+    @Body() meetingData: any,
+  ) {
+    return await this.incorporationService.saveMeeting(companyId, meetingData);
+  }
 }

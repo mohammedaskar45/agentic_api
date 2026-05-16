@@ -42,96 +42,26 @@ export class IncStakeholder {
   @Column({ name: 'nationality', length: 100, nullable: false })
   nationality: string;
 
-  @Column({ name: 'address', type: 'text', nullable: false })
-  address: string;
+  @Column({ name: 'residential_address', type: 'text', nullable: false })
+  residential_address: string;
 
   @Column({ name: 'occupation', length: 100, nullable: false })
   occupation: string;
 
-  @Column({ name: 'occupation_type', length: 100, nullable: false })
-  occupation_type: string;
+  @Column({ name: 'email_id', length: 255, nullable: false })
+  email_id: string;
 
-  @Column({ name: 'highest_qualification', length: 255, nullable: true })
-  highest_qualification: string;
-
-  // Foreign National Details
-  @Column({ name: 'is_foreign_national', default: false })
-  is_foreign_national: boolean;
-
-  @Column({ name: 'passport_number', length: 50, nullable: true })
-  passport_number: string;
-
-  @Column({ name: 'oci_number', length: 50, nullable: true })
-  oci_number: string;
-
-  @Column({ name: 'qualification', length: 100, nullable: false })
-  qualification: string;
-
-  @Column({ name: 'designation', length: 100, nullable: false })
-  designation: string;
+  @Column({ name: 'mobile_number', length: 20, nullable: true })
+  mobile_number: string;
 
   @Column({ name: 'existing_din', length: 50, nullable: true })
   existing_din: string;
 
-  @Column({ name: 'email', length: 255, nullable: false })
-  email: string;
+  @Column({ name: 'designation', length: 100, nullable: false })
+  designation: string;
 
-  @Column({ name: 'mobile', length: 20, nullable: true })
-  mobile: string;
-
-  @Column({ name: 'other_director_interest', type: 'text', nullable: true })
-  other_director_interest: string;
-
-  @Column({ name: 'id_proof_type', length: 100, nullable: true })
-  id_proof_type: string;
-
-  @Column({ name: 'address_proof_type', length: 100, nullable: true })
-  address_proof_type: string;
-
-  @Column({ name: 'equity_shares', type: 'bigint', default: 0 })
-  equity_shares: number;
-
-  @Column({ name: 'preference_shares', type: 'bigint', default: 0 })
-  preference_shares: number;
-
-  @Column({ name: 'shares_subscribed', length: 50, nullable: true })
-  shares_subscribed: string;
-
-  // Statutory Address History
-  @Column({ name: 'present_address', type: 'text', nullable: true })
-  present_address: string;
-
-  @Column({ name: 'permanent_address', type: 'text', nullable: true })
-  permanent_address: string;
-
-  @Column({ name: 'is_permanent_same_as_present', default: true })
-  is_permanent_same_as_present: boolean;
-
-  @Column({ name: 'stay_duration_years', type: 'integer', nullable: true })
-  stay_duration_years: number;
-
-  @Column({ name: 'stay_duration_months', type: 'integer', nullable: true })
-  stay_duration_months: number;
-
-  @Column({ name: 'previous_address', type: 'text', nullable: true })
-  previous_address: string;
-
-  @Column({ name: 'place_of_birth', length: 255, nullable: true })
-  place_of_birth: string;
-
-  // Other Interests/Directorships
-  @Column({ name: 'other_directorships', type: 'jsonb', nullable: true })
-  other_directorships: any[];
-
-  // Document Linkages
-  @Column({ name: 'pan_file_id', type: 'uuid', nullable: true })
-  pan_file_id: string;
-
-  @Column({ name: 'aadhaar_file_id', type: 'uuid', nullable: true })
-  aadhaar_file_id: string;
-
-  @Column({ name: 'photo_file_id', type: 'uuid', nullable: true })
-  photo_file_id: string;
+  @Column({ name: 'share_subscription', length: 50, nullable: true })
+  share_subscription: string;
 
   @Column({ name: 'status', default: 1, nullable: false })
   status: number;

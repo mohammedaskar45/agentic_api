@@ -26,11 +26,14 @@ export class IncBank {
   @Column({ name: 'bank_name', length: 255, nullable: false })
   bank_name: string;
 
-  @Column({ name: 'account_number', length: 100, nullable: false })
+  @Column({ name: 'account_number', length: 100, nullable: true })
   account_number: string;
 
-  @Column({ name: 'ifsc_code', length: 20, nullable: false })
+  @Column({ name: 'ifsc_code', length: 20, nullable: true })
   ifsc_code: string;
+
+  @Column({ name: 'application_status', length: 50, default: 'pending' })
+  application_status: string;
 
   @Column({ name: 'branch_name', length: 255, nullable: true })
   branch_name: string;
