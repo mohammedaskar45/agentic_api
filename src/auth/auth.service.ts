@@ -3,8 +3,10 @@ import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User } from '../v1/master/access-control/users.entity';
+import { Role } from '../v1/master/access-control/roles.entity';
 import { UserCompanyMapping } from '../v1/master/access-control/user-company-mapping.entity';
 import { LoginDto } from './dto/login.dto';
+import { RegisterDto } from './dto/register.dto';
 import * as bcrypt from 'bcrypt';
 
 @Injectable()
@@ -14,10 +16,54 @@ export class AuthService {
   constructor(
     @InjectRepository(User)
     private userRepository: Repository<User>,
+    @InjectRepository(Role)
+    private roleRepository: Repository<Role>,
     @InjectRepository(UserCompanyMapping)
     private userCompanyMappingRepository: Repository<UserCompanyMapping>,
     private jwtService: JwtService,
   ) {}
+
+  async register(registerDto: RegisterDto) {
+    try {
+      const { name, mail_id, mobile_no, password } = registerDto;
+
+      // Check if user already exists
+      const existingUser = await this.userRepository.findOne({ where: { mail_id } });
+      if (existingUser) {
+        throw new UnauthorizedException('Email already registered');
+      }
+
+      // Get Default Role (Try Client or First Role)
+      let role = await this.roleRepository.findOne({ where: { role_name: 'Client' } });
+      if (!role) {
+        role = await this.roleRepository.findOne({ where: {} }); // Just get any role
+      }
+
+      const salt = await bcrypt.genSalt();
+      const hashedPassword = await bcrypt.hash(password, salt);
+
+      const user = this.userRepository.create({
+        name,
+        mail_id,
+        mobile_no,
+        password: hashedPassword,
+        role_id: role?.role_id,
+        user_type: 'Client',
+        status: 'Active',
+      });
+
+      await this.userRepository.save(user);
+      this.logger.log(`New user registered: ${mail_id}`);
+
+      return {
+        success: true,
+        message: 'Registration successful. Please login.',
+      };
+    } catch (error) {
+      this.logger.error(`Registration error: ${error.message}`);
+      throw error;
+    }
+  }
 
   async login(loginDto: LoginDto) {
     try {

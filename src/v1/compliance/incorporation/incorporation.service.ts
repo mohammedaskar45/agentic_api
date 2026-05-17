@@ -22,6 +22,7 @@ import {
 } from './entities/inc-steps-advanced.entity';
 import { IncAuditor } from './entities/inc-auditor.entity';
 import { IncBank, IncAgile } from './entities/inc-steps-final.entity';
+import { AIService } from '../../master/ai/ai.service';
 
 @Injectable()
 export class IncorporationService {
@@ -32,6 +33,7 @@ export class IncorporationService {
     private readonly logRepository: Repository<IncorporationLog>,
     @InjectRepository(MasterDropdown)
     private readonly dropdownRepository: Repository<MasterDropdown>,
+    private readonly aiService: AIService,
   ) {}
 
   async getDropdownMasters() {
@@ -747,6 +749,13 @@ export class IncorporationService {
     const paidUpCapital = Number(company.paid_up_capital) || 10000;
     const paidUpShares = Math.floor(paidUpCapital / faceValue);
 
+    // AI DRAFTING - The Section 13.2 Logic
+    const { main_objects, ancillary_objects } = await this.aiService.generateMoAObjects(
+      company.main_objects,
+      company.company_type
+    );
+    const aoa_regulations = await this.aiService.generateAoARegulations(company.company_type);
+
     // Prepare Subscriber list string for MoA/AoA
     const subscriberList = stakeholders.map((s, idx) => `${idx + 1}. ${s.full_name.toUpperCase()}`).join('\n');
     const allNames = stakeholders.map(s => s.full_name.toUpperCase()).join(', ');
@@ -757,13 +766,13 @@ export class IncorporationService {
         id: 'moa',
         title: 'Memorandum of Association (MoA)',
         category: 'Constitutional',
-        content: `THE COMPANIES ACT, 2013\n(Company Limited by Shares)\n\nMEMORANDUM OF ASSOCIATION OF\n${companyName}\n\nI. The name of the company is ${companyName}.\n\nII. The registered office of the company will be situated in the State of ${state}.\n\nIII. (a) The objects to be pursued by the company on its incorporation are:\n1. To carry on the business of ${company.main_objects.replace(/^To provide/i, 'providing').replace(/^To carry on/i, 'carrying on')} and to act as a solution provider in the field of technology and corporate compliance.\n\n(b) Matters necessary for furtherance of the objects:\nStandard ancillary objects as per Table A.\n\nIV. The liability of the member(s) is limited.\n\nV. The share capital of the company is Rs. ${totalCapital.toLocaleString('en-IN')} divided into ${totalShares.toLocaleString('en-IN')} Equity Shares of Rs. ${faceValue} each.\n\nLIST OF SUBSCRIBERS:\n${subscriberList}`,
+        content: `THE COMPANIES ACT, 2013\n(Company Limited by Shares)\n\nMEMORANDUM OF ASSOCIATION OF\n${companyName}\n\nI. The name of the company is ${companyName}.\n\nII. The registered office of the company will be situated in the State of ${state}.\n\nIII. (a) The objects to be pursued by the company on its incorporation are:\n${String(main_objects || '').replace(/^To carry on the business of/i, '').trim()}\n\n(b) Matters necessary for furtherance of the objects:\n${ancillary_objects}\n\nIV. The liability of the member(s) is limited.\n\nV. The share capital of the company is Rs. ${totalCapital.toLocaleString('en-IN')} divided into ${totalShares.toLocaleString('en-IN')} Equity Shares of Rs. ${faceValue} each.\n\nLIST OF SUBSCRIBERS:\n${subscriberList}`,
       },
       {
         id: 'aoa',
         title: 'Articles of Association (AoA)',
         category: 'Constitutional',
-        content: `THE COMPANIES ACT, 2013\n(Company Limited by Shares)\n\nARTICLES OF ASSOCIATION OF\n${companyName}\n\n1. The regulations contained in Table 'F' in Schedule I to the Companies Act, 2013 shall apply.\n\n2. The Company is a "Private Company" as per Section 2(68).\n\n3. The Authorised Share Capital is Rs. ${totalCapital.toLocaleString('en-IN')}.\n\nSUBSCRIBERS:\n${allNames}`,
+        content: `THE COMPANIES ACT, 2013\n(Company Limited by Shares)\n\nARTICLES OF ASSOCIATION OF\n${companyName}\n\n${aoa_regulations}\n\nSUBSCRIBERS:\n${allNames}`,
       },
     ];
 

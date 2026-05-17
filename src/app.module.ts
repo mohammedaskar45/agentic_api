@@ -12,6 +12,7 @@ import { AccessControlModule } from './v1/master/access-control/access-control.m
 import { IncorporationModule } from './v1/compliance/incorporation/incorporation.module';
 import { RightsIssueModule } from './v1/compliance/rights-issue/rights-issue.module';
 import { BuybackModule } from './v1/compliance/buyback/buyback.module';
+import { AIChatModule } from './v1/master/ai-chat/ai-chat.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { BuybackModule } from './v1/compliance/buyback/buyback.module';
     IncorporationModule,
     RightsIssueModule,
     BuybackModule,
+    AIChatModule,
   ],
   controllers: [AppController],
   providers: [AppService],
